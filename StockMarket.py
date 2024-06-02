@@ -7,19 +7,29 @@ from pprint import pprint
 from sklearn.metrics.pairwise import euclidean_distances
 import pickle
 
-def ranking_algorithm(X: pd.DataFrame, stock_dataset: pd.DataFrame, query_str: str, top_k=3):
+def ranking_algorithm(X: pd.DataFrame, stock_dataset: pd.DataFrame, query_str: str, to_look=5, top_k=3):
     scores = dict()
-    for stock in stock_dataset.index:
-        if "_scaled" in stock:
-            scores[stock] = euclidean_distances(stock_dataset.loc[[stock]], X.loc[[f"{query_str}_scaled"]])[0, 0]
+    _, n_features = stock_dataset.shape
+    X_shape = X.loc[[f"{query_str}_scaled"]].shape
+    for row_index, stock in enumerate(stock_dataset.index):
+        for col_index, stock_date in enumerate(stock_dataset.columns):
+            if "_scaled" in stock and col_index < n_features-5:
+                stock_val = np.array(stock_dataset.iloc[row_index, col_index:col_index+5]).reshape(X_shape)
+                scores[f"{stock}_{col_index}_{col_index+5}"] = euclidean_distances(stock_val, X.loc[[f"{query_str}_scaled"]])[0, 0]
     ranking = list(sorted(scores.items(), key=lambda x : x[1]))[:top_k]
-    plt.plot(X.loc[f"{query_str}_scaled"].T, "-r", label=f"Query: {query_str}_scaled", linewidth=2)
+    pprint(ranking)
+    stock_val = X.loc[f"{query_str}_scaled"]
+    stock_val.index = range(0, stock_val.size)
+    plt.plot(stock_val, "-r", label=f"Query: {query_str}_scaled", linewidth=2)
     for stock in ranking:
-        plt.plot(stock_dataset.loc[stock[0]].T, label=f"{stock[0]}: {stock[1]:0.2f}")
+        split_data = stock[0].split("_")
+        stock_data, start, end = split_data[0], int(split_data[2]), int(split_data[3])
+        stock_val = stock_dataset.loc[stock_data][start:end]
+        stock_val.index = range(0, stock_val.size)
+        pprint(stock_val)
+        plt.plot(stock_val, label=f"{stock_data}: {stock[1]:0.2f}")
     plt.legend(loc="upper left")
     plt.show()
-
-    pprint(ranking)
 
 def stock_dataframe(Close, Open, stock=None):
     mmscaler = MinMaxScaler()
@@ -29,7 +39,7 @@ def stock_dataframe(Close, Open, stock=None):
 
 def stock_data(period="6mo"):
     stock_codes = None
-    with open("Stock Market Analyzer KNN/stock_codes.pkl", "rb") as f:
+    with open("Stock-Market-Neighbors/stock_codes.pkl", "rb") as f:
         stock_codes = pickle.load(f)
     multi_data = yf.download(stock_codes, period=period)
     mean_datas = dict()
@@ -72,10 +82,8 @@ def stock_query(query: str, period="6mo"):
 
 if __name__ == "__main__":
     query_str = "DOX"
-    query_period = "3mo"
+    query_period = "5d"
     period = "3mo"
     stock_df = stock_data(period)
-    print(stock_df.head())
     query = stock_query(query_str, query_period)
-    print(query.head())
     ranking_algorithm(query, stock_df, query_str, 1)
